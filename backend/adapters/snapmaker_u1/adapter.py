@@ -36,7 +36,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
     def __init__(self, printer_id: int, config: dict[str, Any], event_callback: Any) -> None:
         super().__init__(printer_id, config, event_callback)
         self._ip: str = config["ip_address"]
-        self._port: int = config.get("port", 80)
+        self._port: int = int(config.get("port", 80))
         self._ws: Any = None           # websockets.WebSocketClientProtocol
         self._rpc_id = 0
         self._listen_task: asyncio.Task | None = None
@@ -83,6 +83,13 @@ class SnapmakerU1Adapter(PrinterAdapter):
 
         # Subscribe to the objects we care about
         await self._subscribe()
+
+        # Emit initial state immediately via HTTP so the card populates at once
+        try:
+            initial = await self.get_status()
+            await self._emit(initial)
+        except Exception:
+            logger.warning("[U1:%d] Could not fetch initial status", self.printer_id)
 
         self._listen_task = asyncio.create_task(self._listen_loop())
         logger.info("[U1:%d] Connected", self.printer_id)
@@ -171,8 +178,8 @@ class SnapmakerU1Adapter(PrinterAdapter):
             progress_pct=progress_pct,
             time_elapsed_s=int(ps.get("print_duration", 0)) or None,
             time_remaining_s=None,   # Moonraker doesn't push ETA; calculate from progress
-            current_layer=ps.get("current_layer"),
-            total_layers=ps.get("total_layer"),
+            current_layer=ps.get("info", {}).get("current_layer") or ps.get("current_layer"),
+            total_layers=ps.get("info", {}).get("total_layer") or ps.get("total_layer"),
             nozzle_temp_c=extruder.get("temperature"),
             nozzle_target_c=extruder.get("target"),
             bed_temp_c=bed.get("temperature"),
@@ -186,15 +193,17 @@ class SnapmakerU1Adapter(PrinterAdapter):
     # ------------------------------------------------------------------
 
     async def get_status(self) -> PrinterState:
-        result = await self._rpc("printer.objects.query", {
-            "objects": {
-                "print_stats": None,
-                "virtual_sdcard": None,
-                "extruder": None,
-                "heater_bed": None,
-            }
-        })
-        return self._parse_status(result.get("status", {}))
+        """Query current state via HTTP (reliable one-shot, no WS dependency)."""
+        import httpx  # type: ignore[import]
+        url = (
+            f"http://{self._ip}:{self._port}/printer/objects/query"
+            "?print_stats&virtual_sdcard&extruder&heater_bed"
+        )
+        async with httpx.AsyncClient(timeout=5) as client:
+            r = await client.get(url)
+            r.raise_for_status()
+            data = r.json()
+        return self._parse_status(data.get("result", {}).get("status", {}))
 
     async def upload_file(self, file_path: Path, filename: str) -> str:
         import httpx  # type: ignore[import]
