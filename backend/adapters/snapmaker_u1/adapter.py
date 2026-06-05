@@ -84,16 +84,11 @@ class SnapmakerU1Adapter(PrinterAdapter):
         self._ws = await websockets.connect(uri)
         self._connected = True
 
-        # Subscribe to the objects we care about
-        await self._subscribe()
-
-        # Seed state cache + emit initial state via HTTP so card populates immediately
-        try:
-            self._state_cache = await self._http_query_status()
-            initial = self._parse_status(self._state_cache)
-            await self._emit(initial)
-        except Exception:
-            logger.exception("[U1:%d] Could not fetch initial status", self.printer_id)
+        # Subscribe — the response includes the full current state of all objects
+        initial_status = await self._subscribe()
+        if initial_status:
+            self._state_cache = initial_status
+            await self._emit(self._parse_status(self._state_cache))
 
         self._listen_task = asyncio.create_task(self._listen_loop())
         logger.info("[U1:%d] Connected", self.printer_id)
@@ -123,9 +118,13 @@ class SnapmakerU1Adapter(PrinterAdapter):
             raise RuntimeError(f"Moonraker RPC error: {data['error']}")
         return data.get("result")
 
-    async def _subscribe(self) -> None:
-        """Subscribe to printer object updates via printer.objects.subscribe."""
-        await self._rpc("printer.objects.subscribe", {
+    async def _subscribe(self) -> dict:
+        """
+        Subscribe to printer object updates.
+        Moonraker's response includes a 'status' field with the FULL current
+        state of all subscribed objects — use it to seed the cache immediately.
+        """
+        result = await self._rpc("printer.objects.subscribe", {
             "objects": {
                 "print_stats": None,
                 "virtual_sdcard": None,
@@ -140,6 +139,8 @@ class SnapmakerU1Adapter(PrinterAdapter):
                 "display_status": None,
             }
         })
+        # result = {"eventtime": ..., "status": {all objects}}
+        return result.get("status", {}) if result else {}
 
     # Moonraker objects to query — defines what we care about
     _OBJECTS = [
@@ -181,15 +182,18 @@ class SnapmakerU1Adapter(PrinterAdapter):
                 self._state_cache[key] = value
 
     async def _periodic_refresh(self) -> None:
-        """Poll full HTTP state every 30s — keeps idle temps current when WS is quiet."""
+        """Poll full state every 30s via WS — keeps idle temps current when WS is quiet."""
         while self._connected:
             await asyncio.sleep(30)
             if not self._connected:
                 break
             try:
-                data = await self._http_query_status()
-                self._merge_cache(data)
-                await self._emit(self._parse_status(self._state_cache))
+                result = await self._rpc("printer.objects.query", {
+                    "objects": {k: None for k in self._OBJECTS}
+                })
+                if result:
+                    self._merge_cache(result.get("status", {}))
+                    await self._emit(self._parse_status(self._state_cache))
             except Exception:
                 logger.debug("[U1:%d] Periodic refresh failed", self.printer_id)
 
@@ -299,9 +303,12 @@ class SnapmakerU1Adapter(PrinterAdapter):
     # ------------------------------------------------------------------
 
     async def get_status(self) -> PrinterState:
-        """Query full current state via HTTP and update the cache."""
-        data = await self._http_query_status()
-        self._merge_cache(data)
+        """Query full current state via WebSocket JSON-RPC and update the cache."""
+        result = await self._rpc("printer.objects.query", {
+            "objects": {k: None for k in self._OBJECTS}
+        })
+        if result:
+            self._merge_cache(result.get("status", {}))
         return self._parse_status(self._state_cache)
 
     async def upload_file(self, file_path: Path, filename: str) -> str:
