@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
-import { FolderOpen, Upload, Trash2, Send, FileCode, Loader2 } from 'lucide-react'
+import { FolderOpen, Upload, Trash2, Send, Loader2 } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import { useLibrary, useUploadFile, useDeleteFile, useAddJob } from '@/hooks/useLibrary'
 import { usePrinters } from '@/hooks/usePrinters'

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { ChevronRight, ChevronLeft, Loader2, Check, Scan } from 'lucide-react'
+import { ChevronRight, ChevronLeft, Loader2, Check, Scan, Eye, EyeOff } from 'lucide-react'
 import PageHeader from '@/components/PageHeader'
 import { useAdapters, useAddPrinter } from '@/hooks/usePrinters'
 import { api } from '@/api/client'
@@ -130,19 +130,14 @@ export default function AddPrinterPage() {
               <p className="text-sm text-slate-400">Configure <span className="text-slate-200 font-medium">{selectedAdapter.display_name}</span> connection</p>
               <div className="space-y-3">
                 {schema?.properties && Object.entries(schema.properties).map(([key, field]) => (
-                  <label key={key} className="block">
-                    <span className="text-xs font-medium text-slate-400 mb-1 block">
-                      {field.title ?? key}
-                      {schema.required?.includes(key) && <span className="text-red-400 ml-1">*</span>}
-                    </span>
-                    <input
-                      type={field.format === 'password' ? 'password' : 'text'}
-                      value={config[key] ?? ''}
-                      onChange={(e) => setConfig((c) => ({ ...c, [key]: e.target.value }))}
-                      placeholder={String(field.default ?? '')}
-                      className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-600 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
-                    />
-                  </label>
+                  <PasswordField
+                    key={key}
+                    fieldKey={key}
+                    field={field}
+                    value={config[key] ?? ''}
+                    required={schema.required?.includes(key) ?? false}
+                    onChange={(v) => setConfig((c) => ({ ...c, [key]: v }))}
+                  />
                 ))}
               </div>
               <div className="flex justify-between">
@@ -261,5 +256,44 @@ function BackBtn({ onClick, label }: { onClick: () => void; label: string }) {
     >
       <ChevronLeft className="h-4 w-4" /> {label}
     </button>
+  )
+}
+
+function PasswordField({ fieldKey, field, value, required, onChange }: {
+  fieldKey: string
+  field: { title?: string; type?: string; format?: string; default?: unknown }
+  value: string
+  required: boolean
+  onChange: (v: string) => void
+}) {
+  const [visible, setVisible] = useState(false)
+  const isPassword = field.format === 'password'
+
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-slate-400 mb-1 block">
+        {field.title ?? fieldKey}
+        {required && <span className="text-red-400 ml-1">*</span>}
+      </span>
+      <div className="relative">
+        <input
+          type={isPassword && !visible ? 'password' : 'text'}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={String(field.default ?? '')}
+          className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 pr-9 text-sm text-slate-100 placeholder-slate-600 focus:border-violet-500 focus:outline-none focus:ring-1 focus:ring-violet-500/50"
+        />
+        {isPassword && (
+          <button
+            type="button"
+            onClick={() => setVisible((v) => !v)}
+            className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+            tabIndex={-1}
+          >
+            {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        )}
+      </div>
+    </label>
   )
 }
