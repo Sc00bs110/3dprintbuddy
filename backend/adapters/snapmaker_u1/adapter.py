@@ -92,7 +92,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
             import httpx  # type: ignore[import]
             url = (
                 f"http://{self._ip}:{self._port}/printer/objects/query"
-                "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor+cavity&toolhead&gcode_move"
+                "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor%20cavity&toolhead&gcode_move"
             )
             async with httpx.AsyncClient(timeout=5) as client:
                 r = await client.get(url)
@@ -101,7 +101,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
             initial = self._parse_status(self._state_cache)
             await self._emit(initial)
         except Exception:
-            logger.warning("[U1:%d] Could not fetch initial status", self.printer_id)
+            logger.exception("[U1:%d] Could not fetch initial status", self.printer_id)
 
         self._listen_task = asyncio.create_task(self._listen_loop())
         logger.info("[U1:%d] Connected", self.printer_id)
@@ -266,7 +266,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
         import httpx  # type: ignore[import]
         url = (
             f"http://{self._ip}:{self._port}/printer/objects/query"
-            "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor+cavity&toolhead&gcode_move"
+            "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor%20cavity&toolhead&gcode_move"
         )
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(url)
