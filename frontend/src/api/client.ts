@@ -1,4 +1,5 @@
 import type { AdapterInfo, DiscoveredPrinter, Printer, PrinterState } from '@/types/printer'
+import type { LibraryFile, QueueJob } from '@/types/library'
 
 const BASE = '/api/v1'
 
@@ -28,5 +29,25 @@ export const api = {
   adapters: {
     list: () => request<AdapterInfo[]>('/printers/adapters'),
     discover: () => request<DiscoveredPrinter[]>('/printers/discover'),
+  },
+  library: {
+    list: () => request<LibraryFile[]>('/library/'),
+    delete: (id: number) =>
+      fetch(`${BASE}/library/${id}`, { method: 'DELETE' }).then(() => undefined),
+    upload: (file: File) => {
+      const form = new FormData()
+      form.append('file', file)
+      return fetch(`${BASE}/library/upload`, { method: 'POST', body: form }).then(
+        (r) => r.json() as Promise<LibraryFile>,
+      )
+    },
+  },
+  queue: {
+    list: () => request<QueueJob[]>('/queue/'),
+    add: (body: { printer_id: number; file_id: number; plate_index?: number }) =>
+      request<QueueJob>('/queue/', { method: 'POST', body: JSON.stringify(body) }),
+    dispatch: (id: number) => request<QueueJob>(`/queue/${id}/dispatch`, { method: 'POST' }),
+    delete: (id: number) =>
+      fetch(`${BASE}/queue/${id}`, { method: 'DELETE' }).then(() => undefined),
   },
 }

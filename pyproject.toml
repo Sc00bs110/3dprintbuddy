@@ -4,6 +4,10 @@ version = "0.1.0"
 description = "Self-hosted, plugin-based 3D printer management platform"
 requires-python = ">=3.11"
 
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["backend*"]
+
 # Bundled adapters register themselves here so core discovers them at startup.
 # Third-party adapters add their own entry point in their own pyproject.toml.
 [project.entry-points."threedprintbuddy.adapters"]
