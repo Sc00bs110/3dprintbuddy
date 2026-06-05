@@ -10,6 +10,7 @@ import {
   AlertCircle,
   Wifi,
   WifiOff,
+  Trash2,
 } from 'lucide-react'
 import type { Printer, PrinterState, PrinterCapabilities } from '@/types/printer'
 import { formatSeconds, formatTemp, statusBadgeClass } from '@/utils/format'
@@ -22,9 +23,11 @@ interface Props {
   onResume: () => void
   onCancel: () => void
   onCamera: () => void
+  onDelete: () => void
+  confirmDelete: boolean
 }
 
-export default function PrinterCard({ printer, state, capabilities, onPause, onResume, onCancel, onCamera }: Props) {
+export default function PrinterCard({ printer, state, capabilities, onPause, onResume, onCancel, onCamera, onDelete, confirmDelete }: Props) {
   const { t } = useTranslation()
   const status = state?.status ?? 'offline'
   const isPrinting = status === 'printing'
@@ -128,22 +131,27 @@ export default function PrinterCard({ printer, state, capabilities, onPause, onR
       )}
 
       {/* Controls */}
-      {(isActive || capabilities?.camera) && (
-        <div className="flex items-center gap-2 pt-1 border-t border-slate-800">
-          {isPrinting && capabilities?.pause_resume && (
-            <ControlBtn onClick={onPause} icon={<Pause className="h-3.5 w-3.5" />} label={t('printer.controls.pause')} />
-          )}
-          {isPaused && capabilities?.pause_resume && (
-            <ControlBtn onClick={onResume} icon={<Play className="h-3.5 w-3.5" />} label={t('printer.controls.resume')} variant="primary" />
-          )}
-          {isActive && (
-            <ControlBtn onClick={onCancel} icon={<X className="h-3.5 w-3.5" />} label={t('printer.controls.cancel')} variant="danger" />
-          )}
-          {capabilities?.camera && (
-            <ControlBtn onClick={onCamera} icon={<Camera className="h-3.5 w-3.5" />} label={t('printer.controls.camera')} className="ml-auto" />
-          )}
-        </div>
-      )}
+      <div className="flex items-center gap-2 pt-1 border-t border-slate-800">
+        {isPrinting && capabilities?.pause_resume && (
+          <ControlBtn onClick={onPause} icon={<Pause className="h-3.5 w-3.5" />} label={t('printer.controls.pause')} />
+        )}
+        {isPaused && capabilities?.pause_resume && (
+          <ControlBtn onClick={onResume} icon={<Play className="h-3.5 w-3.5" />} label={t('printer.controls.resume')} variant="primary" />
+        )}
+        {isActive && (
+          <ControlBtn onClick={onCancel} icon={<X className="h-3.5 w-3.5" />} label={t('printer.controls.cancel')} variant="danger" />
+        )}
+        {capabilities?.camera && (
+          <ControlBtn onClick={onCamera} icon={<Camera className="h-3.5 w-3.5" />} label={t('printer.controls.camera')} />
+        )}
+        <ControlBtn
+          onClick={onDelete}
+          icon={<Trash2 className="h-3.5 w-3.5" />}
+          label={confirmDelete ? 'Confirm?' : 'Delete'}
+          variant="danger"
+          className="ml-auto"
+        />
+      </div>
     </div>
   )
 }

@@ -54,6 +54,16 @@ async def add_printer(body: PrinterCreate, db: AsyncSession = Depends(get_db)):
     return printer
 
 
+@router.delete("/{printer_id}", status_code=204)
+async def delete_printer(printer_id: int, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(Printer).where(Printer.id == printer_id))
+    printer = result.scalar_one_or_none()
+    if not printer:
+        raise HTTPException(404, "Printer not found")
+    await db.delete(printer)
+    await db.commit()
+
+
 @router.get("/{printer_id}/status")
 async def get_printer_status(printer_id: int):
     try:

@@ -17,6 +17,14 @@ export function useAddPrinter() {
   })
 }
 
+export function useDeletePrinter() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: api.printers.delete,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['printers'] }),
+  })
+}
+
 export function usePrinterControls(printerId: number) {
   return {
     pause: () => api.printers.pause(printerId),

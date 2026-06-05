@@ -25,6 +25,8 @@ export const api = {
     resume: (id: number) => request<void>(`/printers/${id}/resume`, { method: 'POST' }),
     cancel: (id: number) => request<void>(`/printers/${id}/cancel`, { method: 'POST' }),
     cameraUrl: (id: number) => request<{ url: string }>(`/printers/${id}/camera`),
+    delete: (id: number) =>
+      fetch(`${BASE}/printers/${id}`, { method: 'DELETE' }).then(() => undefined),
   },
   adapters: {
     list: () => request<AdapterInfo[]>('/printers/adapters'),
