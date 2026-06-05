@@ -142,7 +142,11 @@ export default function AddPrinterPage() {
               </div>
               <div className="flex justify-between">
                 <BackBtn onClick={() => setStep('adapter')} label={t('addPrinter.back')} />
-                <NextBtn onClick={() => setStep('name')} label={t('addPrinter.next')} />
+                <NextBtn
+                  onClick={() => setStep('name')}
+                  label={t('addPrinter.next')}
+                  disabled={schema?.required?.some((k) => !config[k]?.trim())}
+                />
               </div>
             </div>
           )}
