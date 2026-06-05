@@ -191,6 +191,12 @@ class SnapmakerU1Adapter(PrinterAdapter):
         }
         status = status_map.get(klipper_state, PrinterStatus.IDLE)
 
+        # virtual_sdcard.is_active is the ground truth for active printing —
+        # the Snapmaker U1 can report "standby" in print_stats between moves
+        # while a file is still actively running.
+        if status == PrinterStatus.IDLE and vsd.get("is_active"):
+            status = PrinterStatus.PRINTING
+
         progress = vsd.get("progress")
         progress_pct = round(progress * 100, 1) if progress is not None else None
 
