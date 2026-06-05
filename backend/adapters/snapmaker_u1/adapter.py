@@ -37,9 +37,11 @@ class SnapmakerU1Adapter(PrinterAdapter):
         super().__init__(printer_id, config, event_callback)
         self._ip: str = config["ip_address"]
         self._port: int = int(config.get("port", 80))
-        self._ws: Any = None           # websockets.WebSocketClientProtocol
+        self._ws: Any = None
         self._rpc_id = 0
         self._listen_task: asyncio.Task | None = None
+        # Moonraker sends partial updates — we merge them into a full state cache
+        self._state_cache: dict[str, Any] = {}
 
     @classmethod
     def capabilities(cls) -> PrinterCapabilities:
@@ -84,9 +86,18 @@ class SnapmakerU1Adapter(PrinterAdapter):
         # Subscribe to the objects we care about
         await self._subscribe()
 
-        # Emit initial state immediately via HTTP so the card populates at once
+        # Seed state cache + emit initial state via HTTP so card populates immediately
         try:
-            initial = await self.get_status()
+            import httpx  # type: ignore[import]
+            url = (
+                f"http://{self._ip}:{self._port}/printer/objects/query"
+                "?print_stats&virtual_sdcard&extruder&heater_bed"
+            )
+            async with httpx.AsyncClient(timeout=5) as client:
+                r = await client.get(url)
+                r.raise_for_status()
+                self._state_cache = r.json().get("result", {}).get("status", {})
+            initial = self._parse_status(self._state_cache)
             await self._emit(initial)
         except Exception:
             logger.warning("[U1:%d] Could not fetch initial status", self.printer_id)
@@ -131,6 +142,14 @@ class SnapmakerU1Adapter(PrinterAdapter):
             }
         })
 
+    def _merge_cache(self, partial: dict) -> None:
+        """Deep-merge a partial Moonraker update into the state cache."""
+        for key, value in partial.items():
+            if isinstance(value, dict) and isinstance(self._state_cache.get(key), dict):
+                self._state_cache[key] = {**self._state_cache[key], **value}
+            else:
+                self._state_cache[key] = value
+
     async def _listen_loop(self) -> None:
         """Receive push updates from Moonraker and emit normalized state."""
         try:
@@ -138,7 +157,9 @@ class SnapmakerU1Adapter(PrinterAdapter):
                 try:
                     msg = json.loads(raw)
                     if msg.get("method") == "notify_status_update":
-                        state = self._parse_status(msg["params"][0])
+                        # Merge partial update into full cache, then parse full state
+                        self._merge_cache(msg["params"][0])
+                        state = self._parse_status(self._state_cache)
                         await self._emit(state)
                 except Exception:
                     logger.exception("[U1:%d] Error parsing message", self.printer_id)
@@ -147,6 +168,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
         except Exception:
             logger.exception("[U1:%d] WebSocket connection lost", self.printer_id)
             self._connected = False
+            await self._emit(PrinterState(status=PrinterStatus.OFFLINE))
 
     # ------------------------------------------------------------------
     # State parsing
