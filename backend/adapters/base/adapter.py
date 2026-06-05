@@ -45,6 +45,15 @@ class MaterialSlot:
 
 
 @dataclass
+class ToolHead:
+    """Temperature state for one tool head / nozzle."""
+    index: int
+    temp_c: float | None = None
+    target_c: float | None = None
+    active: bool = False   # currently extruding / selected
+
+
+@dataclass
 class PrinterCapabilities:
     """Declare what this printer/adapter supports so the UI renders correctly."""
     multi_material: bool = False       # Has AMS / multi-spool system
@@ -72,11 +81,12 @@ class PrinterState:
     time_remaining_s: int | None = None
     current_layer: int | None = None
     total_layers: int | None = None
-    nozzle_temp_c: float | None = None
+    nozzle_temp_c: float | None = None      # primary nozzle (T0 or active head)
     nozzle_target_c: float | None = None
     bed_temp_c: float | None = None
     bed_target_c: float | None = None
     chamber_temp_c: float | None = None
+    tool_heads: list[ToolHead] = field(default_factory=list)   # all tool heads if multi-head
     material_slots: list[MaterialSlot] = field(default_factory=list)
     error_message: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)   # adapter-native payload for debugging

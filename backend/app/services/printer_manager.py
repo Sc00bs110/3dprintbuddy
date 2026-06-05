@@ -78,6 +78,7 @@ class PrinterManager:
                 "bed_temp_c": state.bed_temp_c,
                 "bed_target_c": state.bed_target_c,
                 "chamber_temp_c": state.chamber_temp_c,
+                "tool_heads": [vars(t) for t in state.tool_heads],
                 "material_slots": [vars(s) for s in state.material_slots],
                 "error_message": state.error_message,
             },

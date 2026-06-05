@@ -7,6 +7,13 @@ export type PrinterStatus =
   | 'connecting'
   | 'finishing'
 
+export interface ToolHead {
+  index: number
+  temp_c: number | null
+  target_c: number | null
+  active: boolean
+}
+
 export interface MaterialSlot {
   slot_index: number
   material_type: string | null
@@ -28,6 +35,7 @@ export interface PrinterState {
   bed_temp_c: number | null
   bed_target_c: number | null
   chamber_temp_c: number | null
+  tool_heads: ToolHead[]
   material_slots: MaterialSlot[]
   error_message: string | null
 }

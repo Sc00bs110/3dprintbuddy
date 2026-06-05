@@ -24,6 +24,7 @@ from ..base.adapter import (
     PrinterCapabilities,
     PrinterState,
     PrinterStatus,
+    ToolHead,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,7 +92,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
             import httpx  # type: ignore[import]
             url = (
                 f"http://{self._ip}:{self._port}/printer/objects/query"
-                "?print_stats&virtual_sdcard&extruder&heater_bed"
+                "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed"
             )
             async with httpx.AsyncClient(timeout=5) as client:
                 r = await client.get(url)
@@ -134,11 +135,14 @@ class SnapmakerU1Adapter(PrinterAdapter):
         """Subscribe to printer object updates via printer.objects.subscribe."""
         await self._rpc("printer.objects.subscribe", {
             "objects": {
-                "print_stats": None,        # job name, state, layer info
-                "virtual_sdcard": None,     # progress, file position
-                "extruder": None,           # nozzle temps
-                "heater_bed": None,         # bed temps
-                "display_status": None,     # progress message
+                "print_stats": None,
+                "virtual_sdcard": None,
+                "extruder": None,
+                "extruder1": None,
+                "extruder2": None,
+                "extruder3": None,
+                "heater_bed": None,
+                "display_status": None,
             }
         })
 
@@ -200,18 +204,31 @@ class SnapmakerU1Adapter(PrinterAdapter):
         progress = vsd.get("progress")
         progress_pct = round(progress * 100, 1) if progress is not None else None
 
+        # Build tool head list from all extruders present in data
+        tool_heads = []
+        for i, key in enumerate(["extruder", "extruder1", "extruder2", "extruder3"]):
+            ex = data.get(key)
+            if ex and ex.get("temperature") is not None:
+                tool_heads.append(ToolHead(
+                    index=i,
+                    temp_c=ex.get("temperature"),
+                    target_c=ex.get("target"),
+                    active=ex.get("active_pin", False) or not ex.get("park_pin", True),
+                ))
+
         return PrinterState(
             status=status,
             job_name=ps.get("filename"),
             progress_pct=progress_pct,
             time_elapsed_s=int(ps.get("print_duration", 0)) or None,
-            time_remaining_s=None,   # Moonraker doesn't push ETA; calculate from progress
+            time_remaining_s=None,
             current_layer=ps.get("info", {}).get("current_layer") or ps.get("current_layer"),
             total_layers=ps.get("info", {}).get("total_layer") or ps.get("total_layer"),
             nozzle_temp_c=extruder.get("temperature"),
             nozzle_target_c=extruder.get("target"),
             bed_temp_c=bed.get("temperature"),
             bed_target_c=bed.get("target"),
+            tool_heads=tool_heads,
             error_message=ps.get("message") if klipper_state == "error" else None,
             raw=data,
         )
@@ -225,7 +242,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
         import httpx  # type: ignore[import]
         url = (
             f"http://{self._ip}:{self._port}/printer/objects/query"
-            "?print_stats&virtual_sdcard&extruder&heater_bed"
+            "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed"
         )
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(url)

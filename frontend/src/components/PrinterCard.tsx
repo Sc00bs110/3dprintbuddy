@@ -79,14 +79,24 @@ export default function PrinterCard({ printer, state, capabilities, onPause, onR
       {/* Stats grid */}
       {state && status !== 'offline' && (
         <div className="grid grid-cols-2 gap-2">
-          {/* Nozzle temp */}
-          {state.nozzle_temp_c !== null && (
-            <Stat
-              icon={<Thermometer className="h-3.5 w-3.5 text-orange-400" />}
-              label={t('printer.info.nozzle')}
-              value={formatTemp(state.nozzle_temp_c, state.nozzle_target_c)}
-            />
-          )}
+          {/* Multi-head temps (U1 style) — shown instead of single nozzle */}
+          {state.tool_heads?.length > 1
+            ? state.tool_heads.map((th) => (
+                <Stat
+                  key={th.index}
+                  icon={<Thermometer className={`h-3.5 w-3.5 ${th.active ? 'text-orange-400' : 'text-slate-500'}`} />}
+                  label={`T${th.index}`}
+                  value={formatTemp(th.temp_c, th.target_c)}
+                />
+              ))
+            : state.nozzle_temp_c !== null && (
+                <Stat
+                  icon={<Thermometer className="h-3.5 w-3.5 text-orange-400" />}
+                  label={t('printer.info.nozzle')}
+                  value={formatTemp(state.nozzle_temp_c, state.nozzle_target_c)}
+                />
+              )
+          }
           {/* Bed temp */}
           {state.bed_temp_c !== null && (
             <Stat
