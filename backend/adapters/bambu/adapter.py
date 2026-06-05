@@ -96,7 +96,17 @@ class BambuAdapter(PrinterAdapter):
         tls_ctx.check_hostname = False
         tls_ctx.verify_mode = ssl.CERT_NONE
 
-        client = mqtt.Client(client_id=f"3dprintbuddy_{self.printer_id}", protocol=mqtt.MQTTv311)
+        # paho-mqtt 2.x requires explicit callback API version
+        try:
+            client = mqtt.Client(
+                callback_api_version=mqtt.CallbackAPIVersion.VERSION1,
+                client_id=f"3dprintbuddy_{self.printer_id}",
+                protocol=mqtt.MQTTv311,
+            )
+        except AttributeError:
+            # paho-mqtt 1.x fallback
+            client = mqtt.Client(client_id=f"3dprintbuddy_{self.printer_id}", protocol=mqtt.MQTTv311)
+
         client.username_pw_set("bblp", self._access_code)
         client.tls_set_context(tls_ctx)
         client.on_connect = self._on_connect
@@ -107,7 +117,7 @@ class BambuAdapter(PrinterAdapter):
         await self._loop.run_in_executor(None, lambda: client.connect(self._ip, 8883, keepalive=60))
         client.loop_start()
         self._connected = True
-        logger.info("[Bambu:%d] MQTT connected to %s", self.printer_id, self._ip)
+        logger.info("[Bambu:%d] MQTT loop started for %s", self.printer_id, self._ip)
 
     async def disconnect(self) -> None:
         self._connected = False
@@ -121,12 +131,24 @@ class BambuAdapter(PrinterAdapter):
             topic = f"device/{self._serial}/report"
             client.subscribe(topic)
             logger.info("[Bambu:%d] Subscribed to %s", self.printer_id, topic)
+            # Request an immediate status push from the printer
+            self._publish({"command": "push_status"})
         else:
             logger.error("[Bambu:%d] MQTT connect failed, rc=%d", self.printer_id, rc)
+            if self._loop:
+                asyncio.run_coroutine_threadsafe(
+                    self._emit(PrinterState(status=PrinterStatus.OFFLINE, error_message=f"MQTT auth failed (rc={rc})")),
+                    self._loop,
+                )
 
     def _on_disconnect(self, _client: Any, _userdata: Any, rc: int) -> None:
         logger.warning("[Bambu:%d] MQTT disconnected rc=%d", self.printer_id, rc)
         self._connected = False
+        if self._loop:
+            asyncio.run_coroutine_threadsafe(
+                self._emit(PrinterState(status=PrinterStatus.OFFLINE)),
+                self._loop,
+            )
 
     def _on_message(self, _client: Any, _userdata: Any, msg: Any) -> None:
         try:
