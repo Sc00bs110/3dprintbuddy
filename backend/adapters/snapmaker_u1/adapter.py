@@ -89,15 +89,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
 
         # Seed state cache + emit initial state via HTTP so card populates immediately
         try:
-            import httpx  # type: ignore[import]
-            url = (
-                f"http://{self._ip}:{self._port}/printer/objects/query"
-                "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor%20cavity&toolhead&gcode_move"
-            )
-            async with httpx.AsyncClient(timeout=5) as client:
-                r = await client.get(url)
-                r.raise_for_status()
-                self._state_cache = r.json().get("result", {}).get("status", {})
+            self._state_cache = await self._http_query_status()
             initial = self._parse_status(self._state_cache)
             await self._emit(initial)
         except Exception:
@@ -149,6 +141,37 @@ class SnapmakerU1Adapter(PrinterAdapter):
             }
         })
 
+    # Moonraker objects to query — defines what we care about
+    _OBJECTS = [
+        "print_stats",
+        "virtual_sdcard",
+        "extruder",
+        "extruder1",
+        "extruder2",
+        "extruder3",
+        "heater_bed",
+        "temperature_sensor cavity",   # enclosure sensor
+        "toolhead",
+        "gcode_move",
+    ]
+
+    async def _http_query_status(self) -> dict:
+        """
+        Query Moonraker for all objects we care about via HTTP.
+        Uses httpx params so encoding is handled correctly (space → %20).
+        """
+        import httpx  # type: ignore[import]
+        # Moonraker accepts repeated params with no value: ?print_stats&extruder&...
+        # httpx encodes the space in "temperature_sensor cavity" as %20 automatically.
+        params = [(obj, "") for obj in self._OBJECTS]
+        async with httpx.AsyncClient(timeout=8) as client:
+            r = await client.get(
+                f"http://{self._ip}:{self._port}/printer/objects/query",
+                params=params,
+            )
+            r.raise_for_status()
+        return r.json().get("result", {}).get("status", {})
+
     def _merge_cache(self, partial: dict) -> None:
         """Deep-merge a partial Moonraker update into the state cache."""
         for key, value in partial.items():
@@ -157,8 +180,22 @@ class SnapmakerU1Adapter(PrinterAdapter):
             else:
                 self._state_cache[key] = value
 
+    async def _periodic_refresh(self) -> None:
+        """Poll full HTTP state every 30s — keeps idle temps current when WS is quiet."""
+        while self._connected:
+            await asyncio.sleep(30)
+            if not self._connected:
+                break
+            try:
+                data = await self._http_query_status()
+                self._merge_cache(data)
+                await self._emit(self._parse_status(self._state_cache))
+            except Exception:
+                logger.debug("[U1:%d] Periodic refresh failed", self.printer_id)
+
     async def _listen_loop(self) -> None:
         """Receive push updates from Moonraker and emit normalized state."""
+        asyncio.create_task(self._periodic_refresh())
         try:
             async for raw in self._ws:
                 try:
@@ -262,17 +299,10 @@ class SnapmakerU1Adapter(PrinterAdapter):
     # ------------------------------------------------------------------
 
     async def get_status(self) -> PrinterState:
-        """Query current state via HTTP (reliable one-shot, no WS dependency)."""
-        import httpx  # type: ignore[import]
-        url = (
-            f"http://{self._ip}:{self._port}/printer/objects/query"
-            "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor%20cavity&toolhead&gcode_move"
-        )
-        async with httpx.AsyncClient(timeout=5) as client:
-            r = await client.get(url)
-            r.raise_for_status()
-            data = r.json()
-        return self._parse_status(data.get("result", {}).get("status", {}))
+        """Query full current state via HTTP and update the cache."""
+        data = await self._http_query_status()
+        self._merge_cache(data)
+        return self._parse_status(self._state_cache)
 
     async def upload_file(self, file_path: Path, filename: str) -> str:
         import httpx  # type: ignore[import]
