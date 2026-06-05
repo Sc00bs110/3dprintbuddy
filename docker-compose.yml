@@ -1,0 +1,27 @@
+services:
+  3dprintbuddy:
+    image: ghcr.io/sc00bs110/3dprintbuddy:latest
+    build: .
+    container_name: 3dprintbuddy
+    cap_add:
+      - NET_BIND_SERVICE
+    # Linux: host mode for printer discovery (mDNS, SSDP)
+    network_mode: host
+    # macOS/Windows: comment out network_mode and use ports below
+    #ports:
+    #  - "${PORT:-8000}:8000"
+    volumes:
+      - 3dprintbuddy_data:/app/data
+      - 3dprintbuddy_logs:/app/logs
+    environment:
+      - TZ=${TZ:-UTC}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - PORT=${PORT:-8000}
+      # Optional: external PostgreSQL
+      #- DATABASE_URL=postgresql+asyncpg://user:password@db-host:5432/3dprintbuddy
+    restart: unless-stopped
+
+volumes:
+  3dprintbuddy_data:
+  3dprintbuddy_logs:
