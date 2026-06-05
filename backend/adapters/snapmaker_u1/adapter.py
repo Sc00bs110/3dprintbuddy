@@ -49,11 +49,11 @@ class SnapmakerU1Adapter(PrinterAdapter):
         return PrinterCapabilities(
             multi_material=False,
             camera=True,
-            camera_rtsp=False,       # Moonraker webcam is MJPEG
+            camera_rtsp=False,
             pause_resume=True,
             estimated_time=True,
             layer_info=True,
-            chamber_temp=False,
+            chamber_temp=True,
             enclosure_light=False,
             remote_upload=True,
         )
@@ -92,7 +92,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
             import httpx  # type: ignore[import]
             url = (
                 f"http://{self._ip}:{self._port}/printer/objects/query"
-                "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed"
+                "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor+cavity&toolhead&gcode_move"
             )
             async with httpx.AsyncClient(timeout=5) as client:
                 r = await client.get(url)
@@ -142,6 +142,9 @@ class SnapmakerU1Adapter(PrinterAdapter):
                 "extruder2": None,
                 "extruder3": None,
                 "heater_bed": None,
+                "temperature_sensor cavity": None,
+                "toolhead": None,
+                "gcode_move": None,
                 "display_status": None,
             }
         })
@@ -183,6 +186,9 @@ class SnapmakerU1Adapter(PrinterAdapter):
         vsd = data.get("virtual_sdcard", {})
         extruder = data.get("extruder", {})
         bed = data.get("heater_bed", {})
+        cavity = data.get("temperature_sensor cavity", {})
+        toolhead = data.get("toolhead", {})
+        gcode_move = data.get("gcode_move", {})
 
         klipper_state = ps.get("state", "standby")
         status_map = {
@@ -216,19 +222,37 @@ class SnapmakerU1Adapter(PrinterAdapter):
                     active=ex.get("active_pin", False) or not ex.get("park_pin", True),
                 ))
 
+        # Time calculations
+        print_duration = ps.get("print_duration", 0) or 0
+        estimated_total = toolhead.get("estimated_print_time")
+        time_remaining = int(estimated_total - print_duration) if estimated_total and print_duration else None
+
+        # Speed factor (1.0 = 100%)
+        sf = gcode_move.get("speed_factor")
+        speed_pct = round(sf * 100) if sf is not None else None
+
+        # Z height from toolhead position[2]
+        pos = toolhead.get("position")
+        z_height = round(pos[2], 2) if pos and len(pos) > 2 else None
+
         return PrinterState(
             status=status,
             job_name=ps.get("filename"),
             progress_pct=progress_pct,
-            time_elapsed_s=int(ps.get("print_duration", 0)) or None,
-            time_remaining_s=None,
+            time_elapsed_s=int(print_duration) or None,
+            time_remaining_s=time_remaining,
+            total_print_time_s=int(estimated_total) if estimated_total else None,
             current_layer=ps.get("info", {}).get("current_layer") or ps.get("current_layer"),
             total_layers=ps.get("info", {}).get("total_layer") or ps.get("total_layer"),
             nozzle_temp_c=extruder.get("temperature"),
             nozzle_target_c=extruder.get("target"),
             bed_temp_c=bed.get("temperature"),
             bed_target_c=bed.get("target"),
+            chamber_temp_c=cavity.get("temperature"),
             tool_heads=tool_heads,
+            filament_used_mm=ps.get("filament_used"),
+            speed_factor_pct=speed_pct,
+            z_height_mm=z_height,
             error_message=ps.get("message") if klipper_state == "error" else None,
             raw=data,
         )
@@ -242,7 +266,7 @@ class SnapmakerU1Adapter(PrinterAdapter):
         import httpx  # type: ignore[import]
         url = (
             f"http://{self._ip}:{self._port}/printer/objects/query"
-            "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed"
+            "?print_stats&virtual_sdcard&extruder&extruder1&extruder2&extruder3&heater_bed&temperature_sensor+cavity&toolhead&gcode_move"
         )
         async with httpx.AsyncClient(timeout=5) as client:
             r = await client.get(url)

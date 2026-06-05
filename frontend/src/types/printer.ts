@@ -28,6 +28,7 @@ export interface PrinterState {
   progress_pct: number | null
   time_elapsed_s: number | null
   time_remaining_s: number | null
+  total_print_time_s: number | null
   current_layer: number | null
   total_layers: number | null
   nozzle_temp_c: number | null
@@ -37,6 +38,9 @@ export interface PrinterState {
   chamber_temp_c: number | null
   tool_heads: ToolHead[]
   material_slots: MaterialSlot[]
+  filament_used_mm: number | null
+  speed_factor_pct: number | null
+  z_height_mm: number | null
   error_message: string | null
 }
 

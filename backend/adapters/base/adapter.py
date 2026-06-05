@@ -79,6 +79,7 @@ class PrinterState:
     progress_pct: float | None = None       # 0.0–100.0
     time_elapsed_s: int | None = None
     time_remaining_s: int | None = None
+    total_print_time_s: int | None = None   # estimated total duration
     current_layer: int | None = None
     total_layers: int | None = None
     nozzle_temp_c: float | None = None      # primary nozzle (T0 or active head)
@@ -86,8 +87,11 @@ class PrinterState:
     bed_temp_c: float | None = None
     bed_target_c: float | None = None
     chamber_temp_c: float | None = None
-    tool_heads: list[ToolHead] = field(default_factory=list)   # all tool heads if multi-head
+    tool_heads: list[ToolHead] = field(default_factory=list)
     material_slots: list[MaterialSlot] = field(default_factory=list)
+    filament_used_mm: float | None = None
+    speed_factor_pct: int | None = None     # print speed % (100 = normal)
+    z_height_mm: float | None = None
     error_message: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)   # adapter-native payload for debugging
 

@@ -11,6 +11,9 @@ import {
   Wifi,
   WifiOff,
   Trash2,
+  Gauge,
+  MoveVertical,
+  Spline,
 } from 'lucide-react'
 import type { Printer, PrinterState, PrinterCapabilities } from '@/types/printer'
 import { formatSeconds, formatTemp, statusBadgeClass } from '@/utils/format'
@@ -105,6 +108,14 @@ export default function PrinterCard({ printer, state, capabilities, onPause, onR
               value={formatTemp(state.bed_temp_c, state.bed_target_c)}
             />
           )}
+          {/* Chamber / enclosure temp */}
+          {state.chamber_temp_c !== null && (
+            <Stat
+              icon={<Thermometer className="h-3.5 w-3.5 text-emerald-400" />}
+              label={t('printer.info.chamber')}
+              value={formatTemp(state.chamber_temp_c, null)}
+            />
+          )}
           {/* Layer info */}
           {capabilities?.layer_info && state.current_layer !== null && state.total_layers !== null && (
             <Stat
@@ -113,20 +124,52 @@ export default function PrinterCard({ printer, state, capabilities, onPause, onR
               value={`${state.current_layer} / ${state.total_layers}`}
             />
           )}
+          {/* Z height */}
+          {isActive && state.z_height_mm !== null && (
+            <Stat
+              icon={<MoveVertical className="h-3.5 w-3.5 text-slate-400" />}
+              label="Z Height"
+              value={`${state.z_height_mm} mm`}
+            />
+          )}
+          {/* Time elapsed */}
+          {isActive && state.time_elapsed_s !== null && (
+            <Stat
+              icon={<Clock className="h-3.5 w-3.5 text-slate-400" />}
+              label={t('printer.info.timeElapsed')}
+              value={formatSeconds(state.time_elapsed_s)}
+            />
+          )}
           {/* Time remaining */}
           {isActive && state.time_remaining_s !== null && (
             <Stat
-              icon={<Clock className="h-3.5 w-3.5 text-slate-400" />}
+              icon={<Clock className="h-3.5 w-3.5 text-sky-400" />}
               label={t('printer.info.timeRemaining')}
               value={formatSeconds(state.time_remaining_s)}
             />
           )}
-          {/* Chamber temp */}
-          {capabilities?.chamber_temp && state.chamber_temp_c !== null && (
+          {/* Total print time */}
+          {isActive && state.total_print_time_s !== null && (
             <Stat
-              icon={<Thermometer className="h-3.5 w-3.5 text-emerald-400" />}
-              label={t('printer.info.chamber')}
-              value={formatTemp(state.chamber_temp_c, null)}
+              icon={<Clock className="h-3.5 w-3.5 text-slate-600" />}
+              label="Total"
+              value={formatSeconds(state.total_print_time_s)}
+            />
+          )}
+          {/* Filament used */}
+          {isActive && state.filament_used_mm !== null && (
+            <Stat
+              icon={<Spline className="h-3.5 w-3.5 text-amber-400" />}
+              label="Filament"
+              value={`${(state.filament_used_mm / 1000).toFixed(1)} m`}
+            />
+          )}
+          {/* Print speed */}
+          {isActive && state.speed_factor_pct !== null && state.speed_factor_pct !== 100 && (
+            <Stat
+              icon={<Gauge className="h-3.5 w-3.5 text-violet-400" />}
+              label="Speed"
+              value={`${state.speed_factor_pct}%`}
             />
           )}
         </div>

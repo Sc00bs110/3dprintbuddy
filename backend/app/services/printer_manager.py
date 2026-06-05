@@ -80,6 +80,10 @@ class PrinterManager:
                 "chamber_temp_c": state.chamber_temp_c,
                 "tool_heads": [vars(t) for t in state.tool_heads],
                 "material_slots": [vars(s) for s in state.material_slots],
+                "total_print_time_s": state.total_print_time_s,
+                "filament_used_mm": state.filament_used_mm,
+                "speed_factor_pct": state.speed_factor_pct,
+                "z_height_mm": state.z_height_mm,
                 "error_message": state.error_message,
             },
         })
