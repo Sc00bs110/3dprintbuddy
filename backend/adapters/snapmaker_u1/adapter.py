@@ -85,10 +85,16 @@ class SnapmakerU1Adapter(PrinterAdapter):
         self._ws = await websockets.connect(uri)
         self._connected = True
 
-        # Subscribe — the response includes the full current state of all objects
-        initial_status = await self._subscribe()
-        if initial_status:
-            self._state_cache = initial_status
+        # Subscribe — response may only contain recently-changed objects
+        await self._subscribe()
+
+        # Explicitly query ALL objects to guarantee a complete initial state
+        # (subscribe response only includes changed objects on Snapmaker's Moonraker fork)
+        full = await self._rpc("printer.objects.query", {
+            "objects": {k: None for k in self._OBJECTS}
+        })
+        if full:
+            self._state_cache = full.get("status", {})
             await self._emit(self._parse_status(self._state_cache))
 
         self._listen_task = asyncio.create_task(self._listen_loop())
@@ -132,13 +138,9 @@ class SnapmakerU1Adapter(PrinterAdapter):
                 raise RuntimeError(f"Moonraker RPC error: {data['error']}")
             return data.get("result")
 
-    async def _subscribe(self) -> dict:
-        """
-        Subscribe to printer object updates.
-        Moonraker's response includes a 'status' field with the FULL current
-        state of all subscribed objects — use it to seed the cache immediately.
-        """
-        result = await self._rpc("printer.objects.subscribe", {
+    async def _subscribe(self) -> None:
+        """Subscribe to printer object updates via Moonraker WebSocket."""
+        await self._rpc("printer.objects.subscribe", {
             "objects": {
                 "print_stats": None,
                 "virtual_sdcard": None,
@@ -153,8 +155,6 @@ class SnapmakerU1Adapter(PrinterAdapter):
                 "display_status": None,
             }
         })
-        # result = {"eventtime": ..., "status": {all objects}}
-        return result.get("status", {}) if result else {}
 
     # Moonraker objects to query — defines what we care about
     _OBJECTS = [

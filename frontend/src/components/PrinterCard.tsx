@@ -148,8 +148,8 @@ export default function PrinterCard({ printer, state, capabilities, onPause, onR
               value={formatSeconds(state.time_remaining_s)}
             />
           )}
-          {/* Total print time */}
-          {isActive && state.total_print_time_s !== null && (
+          {/* Total print time — only show once Klipper's estimate has stabilised (>5%) */}
+          {isActive && state.total_print_time_s !== null && (state.progress_pct ?? 0) > 5 && (
             <Stat
               icon={<Clock className="h-3.5 w-3.5 text-slate-600" />}
               label="Total"

@@ -1,5 +1,5 @@
 export function formatSeconds(seconds: number | null): string {
-  if (seconds === null) return '—'
+  if (seconds === null || isNaN(seconds) || !isFinite(seconds) || seconds < 0) return '—'
   const h = Math.floor(seconds / 3600)
   const m = Math.floor((seconds % 3600) / 60)
   const s = seconds % 60
