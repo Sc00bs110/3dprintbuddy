@@ -291,9 +291,18 @@ class SnapmakerU1Adapter(PrinterAdapter):
                 ))
 
         # Time calculations
+        # Use print_duration (actual time spent printing, excluding pauses/heat-up).
+        # Klipper's estimated_print_time is the total G-code move budget from the start
+        # of the file — it's wildly inaccurate as an ETA early in the print.
+        # Instead, derive ETA from elapsed / progress (simple linear extrapolation).
         print_duration = ps.get("print_duration", 0) or 0
-        estimated_total = toolhead.get("estimated_print_time")
-        time_remaining = int(estimated_total - print_duration) if estimated_total and print_duration else None
+        elapsed_s = int(print_duration) if print_duration >= 1 else None
+        if elapsed_s and progress and progress > 0.005:
+            total_estimated_s = int(elapsed_s / progress)
+            time_remaining = max(0, total_estimated_s - elapsed_s)
+        else:
+            total_estimated_s = None
+            time_remaining = None
 
         # Speed factor (1.0 = 100%)
         sf = gcode_move.get("speed_factor")
@@ -307,9 +316,9 @@ class SnapmakerU1Adapter(PrinterAdapter):
             status=status,
             job_name=ps.get("filename"),
             progress_pct=progress_pct,
-            time_elapsed_s=int(print_duration) or None,
+            time_elapsed_s=elapsed_s,
             time_remaining_s=time_remaining,
-            total_print_time_s=int(estimated_total) if estimated_total else None,
+            total_print_time_s=total_estimated_s,
             current_layer=ps.get("info", {}).get("current_layer") or ps.get("current_layer"),
             total_layers=ps.get("info", {}).get("total_layer") or ps.get("total_layer"),
             nozzle_temp_c=extruder.get("temperature"),
