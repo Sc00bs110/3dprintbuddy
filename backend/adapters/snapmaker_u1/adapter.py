@@ -41,8 +41,9 @@ class SnapmakerU1Adapter(PrinterAdapter):
         self._ws: Any = None
         self._rpc_id = 0
         self._listen_task: asyncio.Task | None = None
-        # Moonraker sends partial updates — we merge them into a full state cache
         self._state_cache: dict[str, Any] = {}
+        # Notifications received during _rpc() calls — drained by _listen_loop
+        self._pending_notifications: list[dict] = []
 
     @classmethod
     def capabilities(cls) -> PrinterCapabilities:
@@ -106,17 +107,30 @@ class SnapmakerU1Adapter(PrinterAdapter):
     # ------------------------------------------------------------------
 
     async def _rpc(self, method: str, params: dict | None = None) -> Any:
+        """
+        Send a JSON-RPC request and return the result.
+        Moonraker sends notifications in-band (no 'id' field) before/between
+        responses, so we skip any message that doesn't match our request id.
+        """
         self._rpc_id += 1
-        msg = {"jsonrpc": "2.0", "method": method, "id": self._rpc_id}
+        req_id = self._rpc_id
+        msg = {"jsonrpc": "2.0", "method": method, "id": req_id}
         if params:
             msg["params"] = params
         await self._ws.send(json.dumps(msg))
-        # Simple request/response — for subscriptions we use _listen_loop
-        raw = await self._ws.recv()
-        data = json.loads(raw)
-        if "error" in data:
-            raise RuntimeError(f"Moonraker RPC error: {data['error']}")
-        return data.get("result")
+        # Read messages until we find the one matching our request id
+        while True:
+            raw = await asyncio.wait_for(self._ws.recv(), timeout=15.0)
+            data = json.loads(raw)
+            # Notifications have no 'id' — stash them for _listen_loop to process
+            if "id" not in data:
+                self._pending_notifications.append(data)
+                continue
+            if data.get("id") != req_id:
+                continue  # response for a different request; ignore
+            if "error" in data:
+                raise RuntimeError(f"Moonraker RPC error: {data['error']}")
+            return data.get("result")
 
     async def _subscribe(self) -> dict:
         """
@@ -197,18 +211,31 @@ class SnapmakerU1Adapter(PrinterAdapter):
             except Exception:
                 logger.debug("[U1:%d] Periodic refresh failed", self.printer_id)
 
+    def _handle_notification(self, msg: dict) -> None:
+        """Process a single Moonraker notification message."""
+        if msg.get("method") == "notify_status_update":
+            self._merge_cache(msg["params"][0])
+
     async def _listen_loop(self) -> None:
         """Receive push updates from Moonraker and emit normalized state."""
         asyncio.create_task(self._periodic_refresh())
+
+        # Drain any notifications that arrived during _rpc() calls before loop
+        for pending in self._pending_notifications:
+            self._handle_notification(pending)
+        self._pending_notifications.clear()
+        if self._state_cache:
+            await self._emit(self._parse_status(self._state_cache))
+
         try:
             async for raw in self._ws:
                 try:
                     msg = json.loads(raw)
+                    if "id" in msg:
+                        continue  # RPC response — not our job here
+                    self._handle_notification(msg)
                     if msg.get("method") == "notify_status_update":
-                        # Merge partial update into full cache, then parse full state
-                        self._merge_cache(msg["params"][0])
-                        state = self._parse_status(self._state_cache)
-                        await self._emit(state)
+                        await self._emit(self._parse_status(self._state_cache))
                 except Exception:
                     logger.exception("[U1:%d] Error parsing message", self.printer_id)
         except asyncio.CancelledError:
